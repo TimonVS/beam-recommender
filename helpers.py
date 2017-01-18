@@ -2,107 +2,6 @@ import os
 import pandas as pd
 import numpy as np
 import scipy.sparse as sp
-import praw
-
-DEFAULT_SUBS = [
-    'art',
-    'askscience',
-    'creepy',
-    'dataisbeautiful',
-    'DIY',
-    'Documentaries',
-    'gadgets',
-    'GetMotivated',
-    'OldSchoolCool',
-    'nosleep',
-    'announcements',
-    'mildlyinteresting',
-    'trees',
-    'Games',
-    'LifeProTips',
-    'todayilearned',
-    'funny',
-    'politics',
-    'sports',
-    'Music',
-    'EarthPorn',
-    'gaming',
-    'aww',
-    'IAmA',
-    'AdviceAnimals',
-    'science',
-    'worldnews',
-    'explainlikeimfive',
-    'television',
-    'bestof',
-    'askscience',
-    'Futurology',
-    'pics',
-    'movies',
-    'news',
-    'gifs',
-    'videos',
-    'AskReddit',
-    'books',
-    'technology',
-    'funny',
-    'fffffffuuuuuuuuuuuu',
-    'Showerthoughts',
-    'tifu',
-    'TwoXChromosomes',
-    'photoshopbattles',
-    'WritingPrompts'
-]
-
-DEFAULT_SUBS_IDS = [
-    't5_2qh7a',
-    't5_2qm4e',
-    't5_2raed',
-    't5_2tk95',
-    't5_2qh7d',
-    't5_2qhlh',
-    't5_2qgzt',
-    't5_2rmfx',
-    't5_2tycb',
-    't5_2rm4d',
-    't5_2r0ij',
-    't5_2ti4h',
-    't5_2r9vp',
-    't5_2qhwp',
-    't5_2s5oq',
-    't5_2qqjc',
-    't5_2qh33',
-    't5_2cneq',
-    't5_2qgzy',
-    't5_2qh1u',
-    't5_2sbq3',
-    't5_2qh03',
-    't5_2qh1o',
-    't5_2qzb6',
-    't5_2s7tt',
-    't5_mouw',
-    't5_2qh13',
-    't5_2sokd',
-    't5_2qh6e',
-    't5_2qh3v',
-    't5_2qm4e',
-    't5_2t7no',
-    't5_2qh0u',
-    't5_2qh3s',
-    't5_2qh3l',
-    't5_2qt55',
-    't5_2qh1e',
-    't5_2qh1i',
-    't5_2qh4i',
-    't5_2qh16',
-    't5_2qh33',
-    't5_2qqlo',
-    't5_2szyo',
-    't5_2to41',
-    't5_2r2jt',
-    't5_2tecy',
-    't5_2s3nb'
-]
 
 def calc_sparsity_df(df, row_name, col_name):
     n_rows = df[row_name].unique().shape[0]
@@ -118,24 +17,24 @@ def threshold_interactions_df(df, row_name, col_name, row_min, col_min):
 
     Parameters
     ----------
-    df : DataFrame
+    df: DataFrame
         DataFrame which contains a single row for each interaction between
         two entities. Typically, the two entities are a user and an item.
-    row_name : str
+    row_name: str
         Name of column in df which corresponds to the eventual row in the
         interactions matrix.
-    col_name : str
+    col_name: str
         Name of column in df which corresponds to the eventual column in the
         interactions matrix.
-    row_min : int
+    row_min: int
         Minimum number of interactions that the row entity has had with
         distinct column entities.
-    col_min : int
+    col_min: int
         Minimum number of interactions that the column entity has had with
         distinct row entities.
     Returns
     -------
-    df : DataFrame
+    df: DataFrame
         Thresholded version of the input df. Order of rows is not preserved.
 
     Examples
@@ -195,24 +94,23 @@ def get_df_matrix_mappings(df, row_name, col_name):
 
     Parameters
     ----------
-    df : DataFrame
+    df: DataFrame
         Interactions DataFrame.
-    row_name : str
+    row_name: str
         Name of column in df which contains row entities.
-    col_name : str
+    col_name: str
         Name of column in df which contains column entities.
 
     Returns
     -------
-    rid_to_idx : dict
+    rid_to_idx: dict
         Maps row ID's to the row index in the eventual interactions matrix.
-    idx_to_rid : dict
+    idx_to_rid: dict
         Reverse of rid_to_idx. Maps row index to row ID.
-    cid_to_idx : dict
+    cid_to_idx: dict
         Same as rid_to_idx but for column ID's
-    idx_to_cid : dict
+    idx_to_cid: dict
     """
-
 
     # Create mappings
     rid_to_idx = {}
@@ -235,17 +133,18 @@ def df_to_matrix(df, row_name, col_name, value_name=None):
 
     Parameters
     ----------
-    df : DataFrame
-    row_name : str
-    col_name : str
+    df: DataFrame
+    row_name: str
+    col_name: str
+    value_name: str
 
     Returns
     -------
-    interactions : sparse csr matrix
-    rid_to_idx : dict
-    idx_to_rid : dict
-    cid_to_idx : dict
-    idx_to_cid : dict
+    interactions: sparse csr matrix
+    rid_to_idx: dict
+    idx_to_rid: dict
+    cid_to_idx: dict
+    idx_to_cid: dict
 
     """
 
@@ -271,16 +170,17 @@ def train_test_split(interactions, split_count, fraction=None):
 
     Params
     ------
-    interactions : scipy.sparse matrix
+    interactions: scipy.sparse matrix
         Interactions between users and items.
-    split_count : int
+    split_count: int
         Number of user-item-interactions per user to move
         from training to test set.
-    fractions : float
+    fractions: float
         Fraction of users to split off some of their
         interactions into test set. If None, then all
         users are considered.
     """
+
     # Note: likely not the fastest way to do things below.
     train = interactions.copy().tocoo()
     test = sp.lil_matrix(train.shape)

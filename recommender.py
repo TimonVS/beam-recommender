@@ -3,18 +3,15 @@ import helpers as h
 import numpy as np
 import pandas as pd
 import praw
-
-# TODO: move to .env
-REDDIT_CLIENT_ID = ""
-REDDIT_CLIENT_SECRET = ""
-
+from default_subreddits import DEFAULT_SUBREDDITS_IDS
+import config
 
 class Recommender:
 
     def __init__(self):
-        self.__r = praw.Reddit(client_id=REDDIT_CLIENT_ID,
-                               client_secret=REDDIT_CLIENT_SECRET,
-                               user_agent='beam-discover')
+        self.__r = praw.Reddit(client_id=config.REDDIT_CLIENT_ID,
+                               client_secret=config.REDDIT_CLIENT_SECRET,
+                               user_agent=config.REDDIT_USER_AGENT)
         self.__load_data()
 
     def __load_data(self, from_cache=True):
@@ -29,19 +26,32 @@ class Recommender:
             self._sid_to_idx, self._idx_to_sid = h.df_to_matrix(self._ratings_df, 'user', 'subreddit_id')
 
     def train(self, model_args={}, fit_args={}, train_test_split=False):
+        """Instantiate and train LightFM model.
+
+        Parameters
+        ----------
+        `model_args`: `dict`
+            Arguments used to instantiate `LightFM`.
+
+        `fit_args`: `dict`
+            Arguments used to fit the LightFM model with `LightFM.fit`.
+        """
+
         default_model_args = dict(loss='warp', learning_schedule='adagrad', user_alpha=1e-06, item_alpha=1e-06)
         default_fit_args = dict(epochs=50, num_threads=4)
 
-        if train_test_split:
-            train, test, user_index = h.train_test_split(
-                self._ratings, 5, fraction=0.2)
-        else:
-            train = self._ratings
+        # TODO: evaluation split
+        # if train_test_split:
+        #     train, test, user_index = h.train_test_split(
+        #         self._ratings, 5, fraction=0.2)
+        # else:
+        #     train = self._ratings
+
+        train = self._ratings
 
         self._model = LightFM(**{**default_model_args, **model_args})
         self._model.fit(
             **{**default_fit_args, **dict(interactions=train), **fit_args})
-            self.recommend
 
     def recommend(self, user_ids=[], n=20):
         """Generate recommendations.
@@ -80,25 +90,25 @@ class Recommender:
             scores = self._model.predict(user_id, item_ids)
             raw_recs = np.array(list(self._idx_to_sid.values()))[
                 np.argsort(-scores)]
-            raw_recs = list(self.filter_known_subreddits(username, raw_recs))
+            raw_recs = list(self._filter_known_subreddits(username, raw_recs))
 
             # Filter recommendations from nsfw subreddits, until `n` is reached
             recs = []
             i = 0
             while (len(recs) < n) or i == 3:
-                recs.extend(self.filter_nsfw(raw_recs[:n]))
+                recs.extend(self._filter_nsfw(raw_recs[:n]))
 
             recommendations.append(recs)
 
         return recommendations
 
-    def filter_known_subreddits(self, username, items, threshold=1):
+    def _filter_known_subreddits(self, username, items, threshold=1):
         subs_interacted_with = self._ratings_sum_df[self._ratings_sum_df['user'] == username]\
             .query('count > {}'.format(threshold))['subreddit_id'].tolist()
 
-        return (x for x in items if x not in (subs_interacted_with + h.DEFAULT_SUBS_IDS))
+        return (x for x in items if x not in (subs_interacted_with + DEFAULT_SUBS_IDS))
 
-    def filter_nsfw(self, subreddit_ids):
+    def _filter_nsfw(self, subreddit_ids):
         subs_info = self.__r.info(subreddit_ids)
         return [id for (id, info) in zip(subreddit_ids, subs_info) if info.over18 == False]
 
