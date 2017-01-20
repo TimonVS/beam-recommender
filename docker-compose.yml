@@ -1,0 +1,18 @@
+version: '2'
+services:
+  # mongodb:
+  #   image: 'bitnami/mongodb:latest'
+  #   ports:
+  #     - '27017:27017'
+  #   volumes:
+  #     - ./data/db:/data/db
+  #   environment:
+  #     - 'MONGODB_USERNAME=${MONGODB_USERNAME}'
+  #     - 'MONGODB_PASSWORD=${MONGODB_PASSWORD}'
+  #     - 'MONGODB_DATABASE=${MONGODB_DATABASE}'
+  notebook:
+    build: .
+    ports:
+      - '8888:8888'
+    volumes:
+      - ./:/home/jovyan/work
