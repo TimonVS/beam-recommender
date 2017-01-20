@@ -22,7 +22,9 @@ class Recommender:
         Parameters
         ----------
         `interactions` : `pandas.DataFrame`
-            Columns: (user_id, item_id, rating/count, weight)
+            Interaction matrix containing users and items (columns: `user`, `subreddit_id`)
+            It's possible to provide a count and a weight per interaction with a `count` and
+            `weight` column.
         """
 
         self._interactions_df = interactions_df
@@ -74,13 +76,13 @@ class Recommender:
 
         Parameters
         ----------
-        `interactions`: `scipy csr matrix`
+        `interactions` : `scipy csr matrix`
             Interactions used to train the model. Defaults to all interactions.
 
-        `model_args`: `dict`
+        `model_args` : `dict`
             Arguments used to instantiate `LightFM`.
 
-        `fit_args`: `dict`
+        `fit_args` : `dict`
             Arguments used to fit the LightFM model with `LightFM.fit`.
         """
 
@@ -100,16 +102,16 @@ class Recommender:
 
         Parameters
         ----------
-        `user_ids`: `list[str]`
+        `user_ids` : `list[str]`
             List with usernames of users to generate recommendations for.
             If left empty, all users in provided interactions DataFrame are assumed.
 
-        `n`: `int`
+        `n` : `int`
             Number of recommendations to generate per user.
 
         Returns
         -------
-        recommendations: `list[list[str]]`
+        recommendations : `list[list[str]]`
             List containing lists with recommendations for users.
         """
 
