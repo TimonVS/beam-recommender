@@ -1,34 +1,14 @@
-from datetime import datetime
-
 import numpy as np
 import praw
 import scipy.sparse as sp
-from dateutil.relativedelta import relativedelta
+
+from pandas import DataFrame
 
 from lightfm import LightFM
-from lightfm.evaluation import (auc_score, precision_at_k)
 
 from . import helpers as h
 from . import config
 from .default_subreddits import DEFAULT_SUBREDDITS_IDS
-from .models.beam_interactions import BeamInteractions
-
-
-def get_weights(df, row_name, col_name):
-    rid_to_idx, idx_to_rid,\
-        cid_to_idx, idx_to_cid = h.get_df_matrix_mappings(df,
-                                                          row_name,
-                                                          col_name)
-
-    def map_ids(row, mapper):
-        return mapper[row]
-
-    i = df[row_name].apply(map_ids, args=[rid_to_idx]).as_matrix()
-    j = df[col_name].apply(map_ids, args=[cid_to_idx]).as_matrix()
-    v = df['weight'].as_matrix()
-    weights = sp.coo_matrix((v, (i, j)), dtype=np.float64)
-
-    return weights
 
 
 class Recommender:
@@ -37,30 +17,57 @@ class Recommender:
                               user_alpha=1e-06, item_alpha=1e-06, no_components=50)
     DEFAULT_FIT_ARGS = dict(epochs=100, num_threads=4)
 
-    def __init__(self):
+    def __init__(self, interactions_df: DataFrame):
+        """
+        Parameters
+        ----------
+        `interactions` : `pandas.DataFrame`
+            Columns: (user_id, item_id, rating/count, weight)
+        """
+
+        self._interactions_df = interactions_df
         self.__r = praw.Reddit(client_id=config.REDDIT_CLIENT_ID,
                                client_secret=config.REDDIT_CLIENT_SECRET,
                                user_agent=config.REDDIT_USER_AGENT)
-        self.__load_data()
+        self.__setup()
 
-    def __load_data(self, from_cache=True):
-        beam_interactions = BeamInteractions()
-        self._beam_interactions_sum_df = beam_interactions.get_interactions_sum_df()
+    def __setup(self):
+        self._interactions, self._weights, self._uid_to_idx, self._idx_to_uid,\
+            self._sid_to_idx, self._idx_to_sid = self._extract_compact_representation(
+                self._interactions_df)
 
-        now = datetime.now()
-        since_last_week = datetime.timestamp(
-            now + relativedelta(weeks=-1)) * 1000000
+    def _extract_compact_representation(self, interactions_df: DataFrame, column_labels={}):
+        """
+        Create compact representations of interaction matrix and weights associated with ratings.
+        """
 
-        self._beam_interactions_sum_df['weight'] = self._beam_interactions_sum_df['last_interaction']\
-            .apply(lambda x: 2 if x > since_last_week else 1)
+        default_column_labels = dict(user='user', item='subreddit_id', rating='count',
+                                     weight='weight')
+        column_labels = {**default_column_labels, **column_labels}
 
-        self._ratings_df = self._beam_interactions_sum_df
-        self._weights = get_weights(
-            self._beam_interactions_sum_df, 'user', 'subreddit_id')
+        rid_to_idx, idx_to_rid,\
+            cid_to_idx, idx_to_cid = h.get_df_matrix_mappings(
+                interactions_df,
+                column_labels['user'],
+                column_labels['item'])
 
-        self._ratings, self._uid_to_idx, self._idx_to_uid,\
-            self._sid_to_idx, self._idx_to_sid = h.df_to_matrix(
-                self._ratings_df, 'user', 'subreddit_id', 'count')
+        def map_ids(row, mapper):
+            return mapper[row]
+
+        i = interactions_df[column_labels['user']].apply(
+            map_ids, args=[rid_to_idx]).as_matrix()
+        j = interactions_df[column_labels['item']].apply(
+            map_ids, args=[cid_to_idx]).as_matrix()
+        # Assume all ratings are 1.0 if ratings column doesn't exist
+        v = interactions_df[column_labels['rating']].as_matrix(
+        ) if column_labels['rating'] in interactions_df else np.ones(i.shape[0])
+        w = interactions_df[column_labels['weight']].as_matrix(
+        ) if column_labels['weight'] in interactions_df else np.ones(i.shape[0])
+
+        interactions = sp.coo_matrix((v, (i, j)), dtype=np.float64)
+        weights = sp.coo_matrix((w, (i, j)), dtype=np.float64)
+
+        return interactions, weights, rid_to_idx, idx_to_rid, cid_to_idx, idx_to_cid
 
     def train(self, interactions=None, weights=None, model_args={}, fit_args={}):
         """Instantiate and train LightFM model.
@@ -78,15 +85,15 @@ class Recommender:
         """
 
         if interactions is None:
-            interactions = self._ratings
+            interactions = self._interactions
 
         if weights is None:
             weights = self._weights
 
         self._model = LightFM(**{**self.DEFAULT_MODEL_ARGS, **model_args})
-        self._model.fit(
-            **{**self.DEFAULT_FIT_ARGS, **dict(interactions=interactions), **fit_args},
-            sample_weight=weights)
+        self._model.fit(**{**self.DEFAULT_FIT_ARGS,
+                           **dict(interactions=interactions, sample_weight=weights),
+                           **fit_args})
 
     def recommend(self, user_ids=[], n=20):
         """Generate recommendations.
@@ -108,7 +115,7 @@ class Recommender:
 
         # Default to all users
         if len(user_ids) == 0:
-            user_ids = np.arange(self._ratings.shape[0])
+            user_ids = np.arange(self._interactions.shape[0])
         else:
             if isinstance(user_ids, str):
                 user_ids = [user_ids]
@@ -116,7 +123,7 @@ class Recommender:
             user_ids = [self._uid_to_idx[u] for u in user_ids]
 
         # Default to all items
-        item_ids = np.arange(self._ratings.shape[1])
+        item_ids = np.arange(self._interactions.shape[1])
 
         recommendations = []
 
@@ -125,7 +132,7 @@ class Recommender:
             scores = self._model.predict(user_id, item_ids)
             raw_recs = np.array(list(self._idx_to_sid.values()))[
                 np.argsort(-scores)]
-            raw_recs = list(self._filter_known_subreddits(username, raw_recs))
+            raw_recs = list(self._filter_known_items(username, raw_recs))
 
             # Filter recommendations from nsfw subreddits, until `n` is reached
             recs = []
@@ -138,39 +145,25 @@ class Recommender:
 
         return recommendations
 
-    def _filter_known_subreddits(self, username, items, threshold=0):
-        subs_interacted_with = self._ratings_df[self._ratings_df['user'] == username]\
+    def _filter_known_items(self, username, items, threshold=0):
+        """
+        Filter default subreddits and subreddits the user has already interacted with.
+
+        Parameters
+        ----------
+        `threshold` : `int`
+            How many interactions must a user have had with an item before it's filtered
+        """
+        subs_interacted_with = self._interactions_df[self._interactions_df['user'] == username]\
             .query('count > {}'.format(threshold))['subreddit_id'].tolist()
 
         return (x for x in items if x not in (subs_interacted_with + DEFAULT_SUBREDDITS_IDS))
 
     def _filter_nsfw(self, subreddit_ids):
-        subs_info = self.__r.info(subreddit_ids)
-        return [info.display_name for (id, info) in zip(subreddit_ids, subs_info) if info.over18 is False]
-
-    def evaluate(self, measures=['precision']):
-        """Evaluate the performance of the recommender system.
-
-        Parameters
-        ----------
-        `measures`: `list[str]`
-            Possible values: precision, recall, auc.
+        """
+        Filter subreddits that are marked as nsfw.
         """
 
-        train, test, user_index, test_interactions = h.train_test_split(
-            self._ratings, 5, fraction=0.2)
-
-        weights_copy = self._weights.copy().tolil()
-
-        for user, interaction_index in test_interactions.items():
-            weights_copy[user, interaction_index] = 0.
-
-        weights_copy = weights_copy.tocoo()
-
-        self.train(train, weights_copy)
-        patk = precision_at_k(
-            self._model, test_interactions=test, train_interactions=train, num_threads=4)
-        auc = auc_score(self._model, test_interactions=test,
-                        train_interactions=train, num_threads=4)
-        print(patk.mean())
-        print(auc.mean())
+        subs_info = self.__r.info(subreddit_ids)
+        return [info.display_name for (id, info) in zip(subreddit_ids, subs_info)
+                if info.over18 is False]
