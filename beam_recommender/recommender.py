@@ -159,7 +159,7 @@ class Recommender:
         subs_interacted_with = self._interactions_df[self._interactions_df['user'] == username]\
             .query('count > {}'.format(threshold))['subreddit_id'].tolist()
 
-        return (x for x in items if x not in (subs_interacted_with + DEFAULT_SUBREDDITS_IDS))
+        return (sub for sub in items if sub not in (subs_interacted_with + DEFAULT_SUBREDDITS_IDS))
 
     def _filter_nsfw(self, subreddit_ids):
         """
