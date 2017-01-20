@@ -1,16 +1,16 @@
-import os
-import pandas as pd
 import numpy as np
 import scipy.sparse as sp
+
 
 def calc_sparsity_df(df, row_name, col_name):
     n_rows = df[row_name].unique().shape[0]
     n_cols = df[col_name].unique().shape[0]
-    sparsity = float(df.shape[0]) / float(n_rows*n_cols) * 100
+    sparsity = float(df.shape[0]) / float(n_rows * n_cols) * 100
     print('Starting interactions info')
     print('Number of rows: {}'.format(n_rows))
     print('Number of cols: {}'.format(n_cols))
     print('Sparsity: {:4.3f}%'.format(sparsity))
+
 
 def threshold_interactions_df(df, row_name, col_name, row_min, col_min):
     """Limit interactions df to minimum row and column interactions.
@@ -62,7 +62,7 @@ def threshold_interactions_df(df, row_name, col_name, row_min, col_min):
 
     n_rows = df[row_name].unique().shape[0]
     n_cols = df[col_name].unique().shape[0]
-    sparsity = float(df.shape[0]) / float(n_rows*n_cols) * 100
+    sparsity = float(df.shape[0]) / float(n_rows * n_cols) * 100
     print('Starting interactions info')
     print('Number of rows: {}'.format(n_rows))
     print('Number of cols: {}'.format(n_cols))
@@ -72,16 +72,18 @@ def threshold_interactions_df(df, row_name, col_name, row_min, col_min):
     while not done:
         starting_shape = df.shape[0]
         col_counts = df.groupby(row_name)[col_name].count()
-        df = df[~df[row_name].isin(col_counts[col_counts < col_min].index.tolist())]
+        df = df[~df[row_name].isin(
+            col_counts[col_counts < col_min].index.tolist())]
         row_counts = df.groupby(col_name)[row_name].count()
-        df = df[~df[col_name].isin(row_counts[row_counts < row_min].index.tolist())]
+        df = df[~df[col_name].isin(
+            row_counts[row_counts < row_min].index.tolist())]
         ending_shape = df.shape[0]
         if starting_shape == ending_shape:
             done = True
 
     n_rows = df[row_name].unique().shape[0]
     n_cols = df[col_name].unique().shape[0]
-    sparsity = float(df.shape[0]) / float(n_rows*n_cols) * 100
+    sparsity = float(df.shape[0]) / float(n_rows * n_cols) * 100
     print('Ending interactions info')
     print('Number of rows: {}'.format(n_rows))
     print('Number of columns: {}'.format(n_cols))
@@ -156,11 +158,11 @@ def df_to_matrix(df, row_name, col_name, value_name=None):
     def map_ids(row, mapper):
         return mapper[row]
 
-    I = df[row_name].apply(map_ids, args=[rid_to_idx]).as_matrix()
-    J = df[col_name].apply(map_ids, args=[cid_to_idx]).as_matrix()
-    V = df[value_name].as_matrix() if value_name else np.ones(I.shape[0])
-    interactions = sp.coo_matrix((V, (I, J)), dtype=np.float64)
-    interactions = interactions.tocsr()
+    i = df[row_name].apply(map_ids, args=[rid_to_idx]).as_matrix()
+    j = df[col_name].apply(map_ids, args=[cid_to_idx]).as_matrix()
+    v = df[value_name].as_matrix() if value_name else np.ones(i.shape[0])
+    interactions = sp.coo_matrix((v, (i, j)), dtype=np.float64)
+
     return interactions, rid_to_idx, idx_to_rid, cid_to_idx, idx_to_cid
 
 
@@ -194,23 +196,33 @@ def train_test_split(interactions, split_count, fraction=None):
             ).tolist()
         except:
             print(('Not enough users with > {} '
-                  'interactions for fraction of {}')\
-                  .format(2*split_count, fraction))
+                   'interactions for fraction of {}')
+                  .format(2 * split_count, fraction))
             raise
     else:
         user_index = range(train.shape[0])
 
     train = train.tolil()
 
+    interactions_csr_copy = interactions.copy().tocsr()
+    test_interactions_indices = []
+    test_interactions_all = {}
+
     for user in user_index:
-        test_interactions = np.random.choice(interactions.getrow(user).indices,
-                                        size=split_count,
-                                        replace=False)
+        test_interactions = np.random.choice(interactions_csr_copy.getrow(user).indices,
+                                             size=split_count,
+                                             replace=False)
+
+        test_interactions_all[user] = test_interactions
+        test_interactions_indices.extend(
+            test_interactions)  # FIXME: temporary solution
+
         train[user, test_interactions] = 0.
         # These are just 1.0 right now
-        test[user, test_interactions] = interactions[user, test_interactions]
-
+        test[user, test_interactions] = interactions_csr_copy[
+            user, test_interactions]
 
     # Test and training are truly disjoint
     assert(train.multiply(test).nnz == 0)
-    return train.tocsr(), test.tocsr(), user_index
+    return train.tocoo(), test.tocoo(), user_index, test_interactions_all
+    # return train.tocsr(), test.tocsr(), user_index
