@@ -23,10 +23,10 @@ def get_weights(df, row_name, col_name):
     def map_ids(row, mapper):
         return mapper[row]
 
-    I = df[row_name].apply(map_ids, args=[rid_to_idx]).as_matrix()
-    J = df[col_name].apply(map_ids, args=[cid_to_idx]).as_matrix()
-    V = df['weight'].as_matrix()
-    weights = sp.coo_matrix((V, (I, J)), dtype=np.float64)
+    i = df[row_name].apply(map_ids, args=[rid_to_idx]).as_matrix()
+    j = df[col_name].apply(map_ids, args=[cid_to_idx]).as_matrix()
+    v = df['weight'].as_matrix()
+    weights = sp.coo_matrix((v, (i, j)), dtype=np.float64)
 
     return weights
 
