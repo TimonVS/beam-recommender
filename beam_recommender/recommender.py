@@ -33,6 +33,10 @@ def get_weights(df, row_name, col_name):
 
 class Recommender:
 
+    DEFAULT_MODEL_ARGS = dict(loss='warp', learning_schedule='adagrad',
+                              user_alpha=1e-06, item_alpha=1e-06, no_components=50)
+    DEFAULT_FIT_ARGS = dict(epochs=100, num_threads=4)
+
     def __init__(self):
         self.__r = praw.Reddit(client_id=config.REDDIT_CLIENT_ID,
                                client_secret=config.REDDIT_CLIENT_SECRET,
@@ -43,12 +47,12 @@ class Recommender:
         beam_interactions = BeamInteractions()
         self._beam_interactions_sum_df = beam_interactions.get_interactions_sum_df()
 
-        NOW = datetime.now()
-        SINCE_LAST_WEEK = datetime.timestamp(
-            NOW + relativedelta(weeks=-1)) * 1000000
+        now = datetime.now()
+        since_last_week = datetime.timestamp(
+            now + relativedelta(weeks=-1)) * 1000000
 
         self._beam_interactions_sum_df['weight'] = self._beam_interactions_sum_df['last_interaction']\
-            .apply(lambda x: 2 if x > SINCE_LAST_WEEK else 1)
+            .apply(lambda x: 2 if x > since_last_week else 1)
 
         self._ratings_df = self._beam_interactions_sum_df
         self._weights = get_weights(
@@ -79,13 +83,10 @@ class Recommender:
         if weights is None:
             weights = self._weights
 
-        DEFAULT_MODEL_ARGS = dict(loss='warp', learning_schedule='adagrad',
-                                  user_alpha=1e-06, item_alpha=1e-06, no_components=50)
-        DEFAULT_FIT_ARGS = dict(epochs=100, num_threads=4)
-
-        self._model = LightFM(**{**DEFAULT_MODEL_ARGS, **model_args})
+        self._model = LightFM(**{**self.DEFAULT_MODEL_ARGS, **model_args})
         self._model.fit(
-            **{**DEFAULT_FIT_ARGS, **dict(interactions=interactions), **fit_args}, sample_weight=weights)
+            **{**self.DEFAULT_FIT_ARGS, **dict(interactions=interactions), **fit_args},
+            sample_weight=weights)
 
     def recommend(self, user_ids=[], n=20):
         """Generate recommendations.
