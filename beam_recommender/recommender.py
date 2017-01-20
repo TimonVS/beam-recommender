@@ -18,7 +18,8 @@ class Recommender:
     DEFAULT_FIT_ARGS = dict(epochs=100, num_threads=4)
 
     def __init__(self, interactions_df: DataFrame):
-        """
+        """Initialise Recommender class.
+
         Parameters
         ----------
         `interactions` : `pandas.DataFrame`
@@ -39,8 +40,7 @@ class Recommender:
                 self._interactions_df)
 
     def _extract_compact_representation(self, interactions_df: DataFrame, column_labels={}):
-        """
-        Create compact representations of interaction matrix and weights associated with ratings.
+        """Create compact representations of interaction matrix and weights associated with ratings.
         """
 
         default_column_labels = dict(user='user', item='subreddit_id', rating='count',
@@ -148,8 +148,7 @@ class Recommender:
         return recommendations
 
     def _filter_known_items(self, username, items, threshold=0):
-        """
-        Filter default subreddits and subreddits the user has already interacted with.
+        """Filter default subreddits and subreddits the user has already interacted with.
 
         Parameters
         ----------
@@ -162,9 +161,7 @@ class Recommender:
         return (sub for sub in items if sub not in (subs_interacted_with + DEFAULT_SUBREDDITS_IDS))
 
     def _filter_nsfw(self, subreddit_ids):
-        """
-        Filter subreddits that are marked as nsfw.
-        """
+        """Filter subreddits that are marked as nsfw."""
 
         subs_info = self.__r.info(subreddit_ids)
         return [info.display_name for (id, info) in zip(subreddit_ids, subs_info)
