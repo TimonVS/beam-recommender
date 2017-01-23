@@ -6,15 +6,17 @@ from dateutil.relativedelta import relativedelta
 
 class BeamInteractions:
 
-    def get_raw_interactions(self):
+    @staticmethod
+    def get_raw_interactions():
         # TODO: get data from BigQuery
         return pd.read_pickle('./data/beam_interactions_df.pk')
 
-    def get_interactions_sum(self):
+    @staticmethod
+    def get_interactions_sum():
         # TODO: get data from BigQuery
         # return pd.read_pickle('./data/beam_interactions_sum.pk')
 
-        raw_interactions_df = self.get_raw_interactions()
+        raw_interactions_df = BeamInteractions.get_raw_interactions()
 
         # Group interactions per user per subreddit and calculate the count of
         # interactions
@@ -29,8 +31,9 @@ class BeamInteractions:
 
         return interactions_sum_df
 
-    def get_interactions_with_weights(self):
-        interactions_df = self.get_interactions_sum()
+    @staticmethod
+    def get_interactions_with_weights():
+        interactions_df = BeamInteractions.get_interactions_sum()
 
         now = datetime.now()
         since_last_month = datetime.timestamp(
