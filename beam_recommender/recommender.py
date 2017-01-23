@@ -1,10 +1,11 @@
 import numpy as np
 import praw
 import scipy.sparse as sp
-
 from pandas import DataFrame
 
 from lightfm import LightFM
+from lightfm.evaluation import (auc_score, precision_at_k, recall_at_k,
+                                reciprocal_rank)
 
 from . import helpers as h
 from . import config
@@ -13,11 +14,12 @@ from .default_subreddits import DEFAULT_SUBREDDITS_IDS
 
 class Recommender:
 
+    DEFAULT_CONFIG = dict(num_threads=1)
     DEFAULT_MODEL_ARGS = dict(loss='warp', learning_schedule='adagrad',
                               user_alpha=1e-06, item_alpha=1e-06, no_components=50)
-    DEFAULT_FIT_ARGS = dict(epochs=100, num_threads=4)
+    DEFAULT_FIT_ARGS = dict(epochs=100)
 
-    def __init__(self, interactions_df: DataFrame):
+    def __init__(self, interactions_df: DataFrame, conf={}):
         """Initialise Recommender class.
 
         Parameters
@@ -29,18 +31,18 @@ class Recommender:
         """
 
         self._interactions_df = interactions_df
+        self._config = {**self.DEFAULT_CONFIG, **conf}
+
+        assert self._config['num_threads'] > 0
+
         self.__r = praw.Reddit(client_id=config.REDDIT_CLIENT_ID,
                                client_secret=config.REDDIT_CLIENT_SECRET,
                                user_agent=config.REDDIT_USER_AGENT)
-        self.__setup()
-
-    def __setup(self):
         self._interactions, self._weights, self._uid_to_idx, self._idx_to_uid,\
-            self._sid_to_idx, self._idx_to_sid = Recommender.extract_compact_representation(
+            self._sid_to_idx, self._idx_to_sid = self.__extract_compact_representation(
                 self._interactions_df)
 
-    @staticmethod
-    def extract_compact_representation(interactions_df: DataFrame, column_labels={}):
+    def __extract_compact_representation(self, interactions_df: DataFrame, column_labels={}):
         """Create compact representations of interaction matrix and weights associated with ratings.
         """
 
@@ -95,7 +97,8 @@ class Recommender:
 
         self._model = LightFM(**{**self.DEFAULT_MODEL_ARGS, **model_args})
         self._model.fit(**{**self.DEFAULT_FIT_ARGS,
-                           **dict(interactions=interactions, sample_weight=weights),
+                           **dict(interactions=interactions, sample_weight=weights,
+                                  num_threads=self._config['num_threads']),
                            **fit_args})
 
     def recommend(self, user_ids=[], n=20):
@@ -135,20 +138,58 @@ class Recommender:
             scores = self._model.predict(user_id, item_ids)
             raw_recs = np.array(list(self._idx_to_sid.values()))[
                 np.argsort(-scores)]
-            raw_recs = list(self._filter_known_items(username, raw_recs))
+            raw_recs = list(self.__filter_known_items(username, raw_recs))
 
             # Filter recommendations from nsfw subreddits, until `n` is reached
             recs = []
             i = 0
             while (len(recs) < n) or i == 3:
-                recs.extend(self._filter_nsfw(raw_recs[n * i:n * (i + 1)]))
+                recs.extend(self.__filter_nsfw(raw_recs[n * i:n * (i + 1)]))
                 i += 1
 
             recommendations.append(recs[:n])
 
         return recommendations
 
-    def _filter_known_items(self, username, items, threshold=0):
+    def evaluate(self, measures=['precision'], interval=10):
+        """Evaluate the performance of the recommender system.
+
+        Parameters
+        ----------
+        `measures` : `list[str]`
+            Possible values: precision, recall, rr, auc.
+        """
+
+        train, test, user_index, test_interactions = h.train_test_split(
+            self._interactions, 5, fraction=0.4)
+
+        weights = self._weights.copy().tolil()
+
+        for user, interaction_index in test_interactions.items():
+            weights[user, interaction_index] = 0.
+
+        weights = weights.tocoo()
+
+        self.train(train, weights)
+        patk = precision_at_k(
+            self._model, test_interactions=test, train_interactions=train,
+            num_threads=self._config['num_threads'])
+        ratk = recall_at_k(
+            self._model, test_interactions=test,
+            train_interactions=train, num_threads=self._config['num_threads'])
+        auc = auc_score(
+            self._model, test_interactions=test,
+            train_interactions=train, num_threads=self._config['num_threads'])
+        rr = reciprocal_rank(
+            self._model, test_interactions=test,
+            train_interactions=train, num_threads=self._config['num_threads'])
+
+        print('Precision@10', patk.mean())
+        print('Recall@10', ratk.mean())
+        print('AUC', auc.mean())
+        print('Reciprocal Rank', rr.mean())
+
+    def __filter_known_items(self, username, items, threshold=0):
         """Filter default subreddits and subreddits the user has already interacted with.
 
         Parameters
@@ -161,7 +202,7 @@ class Recommender:
 
         return (sub for sub in items if sub not in (subs_interacted_with + DEFAULT_SUBREDDITS_IDS))
 
-    def _filter_nsfw(self, subreddit_ids):
+    def __filter_nsfw(self, subreddit_ids):
         """Filter subreddits that are marked as nsfw."""
 
         subs_info = self.__r.info(subreddit_ids)
