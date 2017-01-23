@@ -218,11 +218,8 @@ def train_test_split(interactions, split_count, fraction=None):
             test_interactions)  # FIXME: temporary solution
 
         train[user, test_interactions] = 0.
-        # These are just 1.0 right now
-        test[user, test_interactions] = interactions_csr_copy[
-            user, test_interactions]
+        test[user, test_interactions] = interactions_csr_copy[user, test_interactions]
 
     # Test and training are truly disjoint
     assert(train.multiply(test).nnz == 0)
     return train.tocoo(), test.tocoo(), user_index, test_interactions_all
-    # return train.tocsr(), test.tocsr(), user_index

@@ -36,10 +36,11 @@ class Recommender:
 
     def __setup(self):
         self._interactions, self._weights, self._uid_to_idx, self._idx_to_uid,\
-            self._sid_to_idx, self._idx_to_sid = self._extract_compact_representation(
+            self._sid_to_idx, self._idx_to_sid = Recommender.extract_compact_representation(
                 self._interactions_df)
 
-    def _extract_compact_representation(self, interactions_df: DataFrame, column_labels={}):
+    @staticmethod
+    def extract_compact_representation(interactions_df: DataFrame, column_labels={}):
         """Create compact representations of interaction matrix and weights associated with ratings.
         """
 
