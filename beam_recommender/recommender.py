@@ -14,7 +14,7 @@ from .default_subreddits import DEFAULT_SUBREDDITS_IDS
 
 class Recommender:
 
-    DEFAULT_CONFIG = dict(num_threads=1)
+    DEFAULT_CONFIG = dict(num_threads=1, verbose=False)
     DEFAULT_MODEL_ARGS = dict(loss='warp', learning_schedule='adagrad',
                               user_alpha=1e-06, item_alpha=1e-06, no_components=50)
     DEFAULT_FIT_ARGS = dict(epochs=100)
@@ -149,7 +149,7 @@ class Recommender:
 
             recommendations.append(recs[:n])
 
-        return recommendations
+        return recommendations[:n]
 
     def evaluate(self, measures=['precision'], interval=10):
         """Evaluate the performance of the recommender system.
@@ -171,6 +171,7 @@ class Recommender:
         weights = weights.tocoo()
 
         self.train(train, weights)
+
         patk = precision_at_k(
             self._model, test_interactions=test, train_interactions=train,
             num_threads=self._config['num_threads'])
